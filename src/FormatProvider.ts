@@ -38,8 +38,7 @@ class TemporaryFile {
 }
 abstract class FileBasedFormattingEditProvider
   extends ToolConfig
-  implements vscode.DocumentFormattingEditProvider
-{
+  implements vscode.DocumentFormattingEditProvider {
   private namespace: string
   private tmpFileExt: string // .v, .sv, .vhd
 
@@ -106,8 +105,7 @@ class IStyleVerilogFormatterEditProvider extends FileBasedFormattingEditProvider
 
 class VeribleVerilogFormatEditProvider
   extends ToolConfig
-  implements vscode.DocumentFormattingEditProvider
-{
+  implements vscode.DocumentFormattingEditProvider {
   constructor(namespace: string) {
     super(namespace)
   }
@@ -117,32 +115,50 @@ class VeribleVerilogFormatEditProvider
     _options: vscode.FormattingOptions,
     _token: vscode.CancellationToken
   ): vscode.ProviderResult<vscode.TextEdit[]> {
-    let binPath: string = this.path.getValue()
-    if (binPath === undefined) {
+    const binPath = this.path.getValue()
+    if (!binPath) {
       this.logger.warn('No path specified for formatter')
       return []
     }
 
-    let args = this.args.getValue().split(' ')
+    const inputText = document.getText()
+    if (!inputText.trim()) {
+      this.logger.warn('Empty document – skipping format')
+      return []
+    }
+
+    let rawArgs = this.args.getValue()
+    let args = rawArgs ? rawArgs.trim().split(/\s+/) : []
     args.push('-')
 
     this.logger.info('Executing command: ' + binPath + ' ' + args.join(' '))
 
     try {
       const result = child_process.spawnSync(binPath, args, {
-        input: document.getText(),
+        input: inputText,
         cwd: getWorkspaceFolder(),
         encoding: 'utf-8',
         timeout: 2000,
+        stdio: ['pipe', 'pipe', 'pipe'], 
       })
-      if (result.stdout.length === 0) {
+
+      if (result.error) {
+        this.logger.error('Process error: ' + result.error.message)
+        return []
+      }
+
+      if (result.status !== 0) {
+        this.logger.error(`Formatter exited with code ${result.status}`)
+        this.logger.error(`stderr: ${result.stderr}`)
+        return []
+      }
+
+      if (!result.stdout || result.stdout.trim().length === 0) {
         vscode.window.showErrorMessage('Verilog formatting failed: empty output')
+        this.logger.error(`stderr: ${result.stderr}`)
         return []
       }
-      if (result.status === null) {
-        vscode.window.showErrorMessage('Verilog formatting failed: timed out')
-        return []
-      }
+
       return [
         vscode.TextEdit.replace(
           new vscode.Range(
@@ -166,8 +182,7 @@ class VeribleVerilogFormatEditProvider
 
 abstract class ScopedFormatter
   extends ExtensionComponent
-  implements vscode.DocumentFormattingEditProvider
-{
+  implements vscode.DocumentFormattingEditProvider {
   abstract provideDocumentFormattingEdits(
     document: vscode.TextDocument,
     options: vscode.FormattingOptions,
@@ -206,8 +221,7 @@ enum VerilogFormatter {
 }
 export class VerilogFormatProvider
   extends ScopedFormatter
-  implements vscode.DocumentFormattingEditProvider
-{
+  implements vscode.DocumentFormattingEditProvider {
   verilogFormatter: VerilogFormatEditProvider = new VerilogFormatEditProvider('verilogFormat', '.v')
   iStyleFormatter: IStyleVerilogFormatterEditProvider = new IStyleVerilogFormatterEditProvider(
     'istyleFormat',
@@ -254,8 +268,7 @@ enum SvFormatter {
 }
 export class SystemVerilogFormatProvider
   extends ScopedFormatter
-  implements vscode.DocumentFormattingEditProvider
-{
+  implements vscode.DocumentFormattingEditProvider {
   verible: VeribleVerilogFormatEditProvider = new VeribleVerilogFormatEditProvider(
     'verible-verilog-format'
   )
