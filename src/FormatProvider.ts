@@ -123,12 +123,19 @@ class VeribleVerilogFormatEditProvider
 
     const inputText = document.getText()
     if (!inputText.trim()) {
-      this.logger.warn('Empty document – skipping format')
+      this.logger.warn('Empty document - skipping format')
       return []
     }
 
     let rawArgs = this.args.getValue()
     let args = rawArgs ? rawArgs.trim().split(/\s+/) : []
+
+    // Prevent infinite reformat cycles
+    if (!args.includes('--verify_convergence')) {
+      args.push('--verify_convergence')
+    }
+
+    // Read from stdin
     args.push('-')
 
     this.logger.info('Executing command: ' + binPath + ' ' + args.join(' '))
